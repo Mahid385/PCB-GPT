@@ -1,24 +1,50 @@
 # Circuit DSL to KiCad
 
-This is a small Python compiler for circuitry DSL scripts. You write a normal
-Python file that builds a `Circuit`, then compile it into a KiCad 6+ schematic
-file (`.kicad_sch`).
+A small research prototype exploring **programmatic circuit design and automatic KiCad schematic generation**.
 
-The generated schematic embeds simple symbols, places parts on a grid when no
-coordinates are provided, and connects nets with KiCad labels and short wire
-stubs. That makes the output portable because it does not depend on the user's
-global KiCad symbol libraries.
+The project introduces a lightweight Python-based DSL (Domain-Specific Language) for describing electronic circuits using Python. A circuit defined with the DSL can then be compiled into a portable **KiCad 6+ schematic (`.kicad_sch`)**.
+
+The main goal is to explore how structured, machine-readable circuit descriptions can be transformed into actual EDA artifacts.
+
+## Research Idea
+
+Traditional schematic design requires manually placing symbols, wiring nets, and configuring component properties inside an EDA tool.
+
+This project explores an alternative workflow:
+
+```text
+Circuit Description
+        ↓
+   Python DSL
+        ↓
+Circuit Representation
+        ↓
+     Compiler
+        ↓
+KiCad Schematic
+```
+
+This provides a foundation for experimenting with higher-level systems such as:
+
+- Natural-language → circuit generation
+- AI-assisted schematic design
+- Programmatic electronics design
+- Automated circuit synthesis
+- Design-rule and connectivity validation
 
 ## Quick Start
 
+Compile a circuit definition:
+
 ```powershell
-python -m circuit_dsl examples\astable_555.py -o build\astable_555.kicad_sch
-python -m circuit_dsl examples\voltage_divider.py -o build\esp32_relay_controller.kicad_sch
+python -m circuit_dsl examples\voltage_divider.py -o build\voltage_divider.kicad_sch
 ```
 
-Open either generated `.kicad_sch` file in KiCad's schematic editor.
+The resulting `.kicad_sch` file can be opened directly in KiCad's schematic editor.
 
-## DSL Example
+## Example
+
+A simple voltage-divider circuit can be described as:
 
 ```python
 from circuit_dsl import Circuit
@@ -26,49 +52,246 @@ from circuit_dsl import Circuit
 
 def build() -> Circuit:
     c = Circuit("voltage_divider", title="Voltage Divider")
+
     vin, vout, gnd = c.nets("VIN VOUT GND")
 
     c.vcc("#PWR01", vin, value="+5V", at=(35, 25))
-    c.resistor("R1", "10k", vin, vout, at=(55, 45), rotate=90)
-    c.resistor("R2", "10k", vout, gnd, at=(55, 70), rotate=90)
-    c.capacitor("C1", "100n", vout, gnd, at=(85, 58), rotate=90)
-    c.connector("J1", [vin, vout, gnd], value="OUT", at=(120, 55))
+
+    c.resistor(
+        "R1",
+        "10k",
+        vin,
+        vout,
+        at=(55, 45),
+        rotate=90
+    )
+
+    c.resistor(
+        "R2",
+        "10k",
+        vout,
+        gnd,
+        at=(55, 70),
+        rotate=90
+    )
+
+    c.capacitor(
+        "C1",
+        "100n",
+        vout,
+        gnd,
+        at=(85, 58),
+        rotate=90
+    )
+
+    c.connector(
+        "J1",
+        [vin, vout, gnd],
+        value="OUT",
+        at=(120, 55)
+    )
+
     c.gnd("#PWR02", gnd, at=(55, 88))
 
     return c
 ```
 
-The compiler accepts any script that defines one of these:
+The compiler converts this structured description into a KiCad schematic containing symbols, component properties, nets, labels, and wire connections.
 
-- `build()` returning a `Circuit`
-- a global `circuit`
-- a global `c`
+## Supported Components
 
-## Built In Parts
+The current prototype provides basic primitives for:
 
-- `c.resistor(ref, value, a, b, ...)`
-- `c.capacitor(ref, value, a, b, ...)`
-- `c.inductor(ref, value, a, b, ...)`
-- `c.diode(ref, value, anode, cathode, ...)`
-- `c.led(ref, value, anode, cathode, ...)`
-- `c.connector(ref, [net1, net2, ...], value="J", ...)`
-- `c.component(ref, value, {"1": net1, "2": net2}, pin_names={...}, ...)`
-- `c.vcc(ref, net, value="+5V", ...)`
-- `c.gnd(ref, net, ...)`
+- Resistors
+- Capacitors
+- Inductors
+- Diodes
+- LEDs
+- Connectors
+- Generic components
+- VCC power symbols
+- GND power symbols
 
-Common keyword arguments are `at=(x, y)`, `rotate=0`, `footprint="Lib:Footprint"`,
-`datasheet="~"`, `in_bom=True`, `on_board=True`, and `dnp=False`.
+Example:
 
-## Demonstration Circuits
+```python
+c.resistor("R1", "10k", net_a, net_b)
+c.capacitor("C1", "100n", net_a, net_b)
+c.diode("D1", "1N4148", net_a, net_b)
+```
 
-- `examples\astable_555.py` is the focused compiler demo. It combines a custom
-  NE555 IC, resistors, capacitors, an LED, power symbols, a connector, footprints,
-  explicit placement, rotation, and shared named nets.
-- `examples\voltage_divider.py` currently contains a larger ESP32 relay-controller
-  sketch. It exercises the generic helper APIs for regulators, sensors, OLEDs,
-  buttons, MOSFETs, relays, and named part-pin connections.
+Generic components can also be described using explicit pin mappings:
 
-## Notes
+```python
+c.component(
+    "U1",
+    "CUSTOM",
+    {"1": net_a, "2": net_b},
+    pin_names={"1": "IN", "2": "OUT"}
+)
+```
 
-This intentionally executes the input file as Python. Treat DSL files like any
-other local Python script and only compile files you trust.
+## Compiler Input
+
+The compiler accepts a Python file containing one of the following:
+
+```python
+def build() -> Circuit:
+    ...
+```
+
+or a global:
+
+```python
+circuit = Circuit(...)
+```
+
+or:
+
+```python
+c = Circuit(...)
+```
+
+## Portable Schematic Generation
+
+One design goal of the prototype is to reduce dependence on the user's globally installed KiCad symbol libraries.
+
+Generated schematics embed simple symbol definitions directly into the schematic file. Components are automatically placed on a grid when coordinates are not explicitly provided.
+
+Connections are represented using KiCad labels and short wire stubs.
+
+This makes the generated schematic easier to transfer between environments.
+
+## Why This Project?
+
+This project is an experiment toward **higher-level representations of electronic circuits**.
+
+Instead of treating a schematic only as a graphical artifact, the circuit can be represented as structured information:
+
+```text
+Components
+    +
+Pins
+    +
+Nets
+    +
+Electrical relationships
+    ↓
+Structured Circuit Model
+```
+
+Such a representation could later become an intermediate layer between AI systems and traditional EDA software.
+
+For example:
+
+```text
+Engineer / AI
+      ↓
+Circuit Intent
+      ↓
+Structured Circuit Representation
+      ↓
+Validation
+      ↓
+KiCad Schematic
+```
+
+## Current Status
+
+**Research / Experimental Prototype**
+
+The current implementation focuses on:
+
+- Defining circuits programmatically
+- Representing components and nets
+- Generating KiCad schematic files
+- Basic automatic component placement
+- Basic connectivity generation
+- Portable embedded symbols
+
+It is **not yet intended to replace a conventional EDA workflow**.
+
+## Limitations
+
+The current prototype is intentionally small.
+
+It does not currently attempt to provide:
+
+- Full electrical rule checking
+- SPICE simulation
+- PCB layout generation
+- Automatic component selection
+- Design optimization
+- Complete KiCad library coverage
+- Production-ready schematic generation
+- Comprehensive schematic validation
+
+These are potential directions for future research.
+
+## Future Direction
+
+Possible extensions include:
+
+1. **Circuit validation**
+   - Connectivity checking
+   - Missing connection detection
+   - Pin compatibility checking
+
+2. **Circuit simulation**
+   - SPICE model integration
+   - Automated simulation
+   - Electrical behavior verification
+
+3. **Natural-language interface**
+
+   ```text
+   "Create a 5V voltage divider with a 10k load"
+                  ↓
+             Circuit DSL
+                  ↓
+             KiCad schematic
+   ```
+
+4. **AI-assisted circuit design**
+   - Circuit reasoning
+   - Component selection
+   - Design constraint handling
+   - Automatic schematic generation
+
+5. **Schematic → structured circuit**
+   - Parse existing KiCad schematics
+   - Recover circuit topology
+   - Build an intermediate representation
+
+## Research Perspective
+
+The long-term research question behind this prototype is:
+
+> **Can electronic circuit design be represented at a sufficiently high level that reasoning systems can generate, validate, and modify real EDA designs programmatically?**
+
+This repository represents an early experiment toward that direction.
+
+## Safety / Execution Note
+
+The compiler intentionally executes the supplied DSL file as Python.
+
+Only compile circuit-definition files that you trust.
+
+## License
+
+License information has not yet been defined for this research prototype.
+
+## Author
+
+**Mahid Sajjad**
+
+Mechatronics & Control Engineering  
+UET Lahore, Pakistan
+
+Research interests include:
+
+- AI-assisted engineering
+- Electronics design automation
+- Mechanical design automation
+- Engineering reasoning systems
+- AI × EDA
